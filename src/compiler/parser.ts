@@ -96,9 +96,15 @@ import {
     ForInStatement,
     ForOfStatement,
     ForStatement,
+    FunctionCompositionLeftExpression,
+    FunctionCompositionLeftOperator,
     FunctionDeclaration,
     FunctionExpression,
     FunctionOrConstructorTypeNode,
+    FunctionPipeExpression,
+    FunctionPipeOperator,
+    FunctionPipeRightExpression,
+    FunctionPipeRightOperator,
     FunctionTypeNode,
     GetAccessorDeclaration,
     getBaseFileName,
@@ -403,7 +409,7 @@ const enum SignatureFlags {
     None = 0,
     Yield = 1 << 0,
     Await = 1 << 1,
-    Type  = 1 << 2,
+    Type = 1 << 2,
     IgnoreMissingOpenBrace = 1 << 4,
     JSDoc = 1 << 5,
 }
@@ -776,7 +782,22 @@ const forEachChildTable: ForEachChildTable = {
     [SyntaxKind.PostfixUnaryExpression]: function forEachChildInPostfixUnaryExpression<T>(node: PostfixUnaryExpression, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
         return visitNode(cbNode, node.operand);
     },
-    [SyntaxKind.BinaryExpression]: function forEachChildInBinaryExpression<T>(node: BinaryExpression, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
+    [SyntaxKind.BinaryExpression]: function forEachChildInFunctionPipeExpression<T>(node: BinaryExpression, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
+        return visitNode(cbNode, node.left) ||
+            visitNode(cbNode, node.operatorToken) ||
+            visitNode(cbNode, node.right);
+    },
+    [SyntaxKind.FunctionCompositionLeftExpression]: function forEachChildInBinaryExpression<T>(node: FunctionCompositionLeftExpression, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
+        return visitNode(cbNode, node.left) ||
+            visitNode(cbNode, node.operatorToken) ||
+            visitNode(cbNode, node.right);
+    },
+    [SyntaxKind.FunctionPipeExpression]: function forEachChildInBinaryExpression<T>(node: FunctionPipeExpression, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
+        return visitNode(cbNode, node.left) ||
+            visitNode(cbNode, node.operatorToken) ||
+            visitNode(cbNode, node.right);
+    },
+    [SyntaxKind.FunctionPipeRightExpression]: function forEachChildInBinaryExpression<T>(node: FunctionPipeRightExpression, cbNode: (node: Node) => T | undefined, _cbNodes?: (nodes: NodeArray<Node>) => T | undefined): T | undefined {
         return visitNode(cbNode, node.left) ||
             visitNode(cbNode, node.operatorToken) ||
             visitNode(cbNode, node.right);
@@ -1653,7 +1674,7 @@ namespace Parser {
                             expression = parseLiteralNode() as StringLiteral | NumericLiteral;
                             break;
                         }
-                        // falls through
+                    // falls through
                     default:
                         expression = parseObjectLiteralExpression();
                         break;
@@ -2590,11 +2611,11 @@ namespace Parser {
         const pos = getNodePos();
         const result =
             kind === SyntaxKind.Identifier ? factoryCreateIdentifier("", /*originalKeywordKind*/ undefined) :
-            isTemplateLiteralKind(kind) ? factory.createTemplateLiteralLikeNode(kind, "", "", /*templateFlags*/ undefined) :
-            kind === SyntaxKind.NumericLiteral ? factoryCreateNumericLiteral("", /*numericLiteralFlags*/ undefined) :
-            kind === SyntaxKind.StringLiteral ? factoryCreateStringLiteral("", /*isSingleQuote*/ undefined) :
-            kind === SyntaxKind.MissingDeclaration ? factory.createMissingDeclaration() :
-            factoryCreateToken(kind);
+                isTemplateLiteralKind(kind) ? factory.createTemplateLiteralLikeNode(kind, "", "", /*templateFlags*/ undefined) :
+                    kind === SyntaxKind.NumericLiteral ? factoryCreateNumericLiteral("", /*numericLiteralFlags*/ undefined) :
+                        kind === SyntaxKind.StringLiteral ? factoryCreateStringLiteral("", /*isSingleQuote*/ undefined) :
+                            kind === SyntaxKind.MissingDeclaration ? factory.createMissingDeclaration() :
+                                factoryCreateToken(kind);
         return finishNode(result, pos) as T;
     }
 
@@ -2864,7 +2885,7 @@ namespace Parser {
                     case SyntaxKind.DotToken: // Not an array literal member, but don't want to close the array (see `tests/cases/fourslash/completionsDotInArrayLiteralInObjectLiteral.ts`)
                         return true;
                 }
-                // falls through
+            // falls through
             case ParsingContext.ArgumentExpressions:
                 return token() === SyntaxKind.DotDotDotToken || isStartOfExpression();
             case ParsingContext.Parameters:
@@ -3692,15 +3713,15 @@ namespace Parser {
         const pos = getNodePos();
         const node =
             isTemplateLiteralKind(kind) ? factory.createTemplateLiteralLikeNode(kind, scanner.getTokenValue(), getTemplateLiteralRawText(kind), scanner.getTokenFlags() & TokenFlags.TemplateLiteralLikeFlags) :
-            // Note that theoretically the following condition would hold true literals like 009,
-            // which is not octal. But because of how the scanner separates the tokens, we would
-            // never get a token like this. Instead, we would get 00 and 9 as two separate tokens.
-            // We also do not need to check for negatives because any prefix operator would be part of a
-            // parent unary expression.
-            kind === SyntaxKind.NumericLiteral ? factoryCreateNumericLiteral(scanner.getTokenValue(), scanner.getNumericLiteralFlags()) :
-            kind === SyntaxKind.StringLiteral ? factoryCreateStringLiteral(scanner.getTokenValue(), /*isSingleQuote*/ undefined, scanner.hasExtendedUnicodeEscape()) :
-            isLiteralKind(kind) ? factoryCreateLiteralLikeNode(kind, scanner.getTokenValue()) :
-            Debug.fail();
+                // Note that theoretically the following condition would hold true literals like 009,
+                // which is not octal. But because of how the scanner separates the tokens, we would
+                // never get a token like this. Instead, we would get 00 and 9 as two separate tokens.
+                // We also do not need to check for negatives because any prefix operator would be part of a
+                // parent unary expression.
+                kind === SyntaxKind.NumericLiteral ? factoryCreateNumericLiteral(scanner.getTokenValue(), scanner.getNumericLiteralFlags()) :
+                    kind === SyntaxKind.StringLiteral ? factoryCreateStringLiteral(scanner.getTokenValue(), /*isSingleQuote*/ undefined, scanner.hasExtendedUnicodeEscape()) :
+                        isLiteralKind(kind) ? factoryCreateLiteralLikeNode(kind, scanner.getTokenValue()) :
+                            Debug.fail();
 
         if (scanner.hasExtendedUnicodeEscape()) {
             node.hasExtendedUnicodeEscape = true;
@@ -4532,13 +4553,13 @@ namespace Parser {
             case SyntaxKind.AsteriskEqualsToken:
                 // If there is '*=', treat it as * followed by postfix =
                 scanner.reScanAsteriskEqualsToken();
-                // falls through
+            // falls through
             case SyntaxKind.AsteriskToken:
                 return parseJSDocAllType();
             case SyntaxKind.QuestionQuestionToken:
                 // If there is '??', treat it as prefix-'?' in JSDoc type.
                 scanner.reScanQuestionToken();
-                // falls through
+            // falls through
             case SyntaxKind.QuestionToken:
                 return parseJSDocUnknownOrNullableType();
             case SyntaxKind.FunctionKeyword:
@@ -5415,7 +5436,7 @@ namespace Parser {
         const hasJSDocFunctionType = unwrappedType && isJSDocFunctionType(unwrappedType);
         if (!allowAmbiguity && token() !== SyntaxKind.EqualsGreaterThanToken && (hasJSDocFunctionType || token() !== SyntaxKind.OpenBraceToken)) {
             // Returning undefined here will cause our caller to rewind to where we started from.
-                return undefined;
+            return undefined;
         }
 
         // If we have an arrow, then try to parse the body. Even if not, try to parse if we
@@ -5516,6 +5537,26 @@ namespace Parser {
         );
     }
 
+    function parseFunctionCompositionLeftExpression(precedence: OperatorPrecedence): Expression {
+        const pos = getNodePos();
+        const leftOperand = parseUnaryExpressionOrHigher();
+        // precedence-1: 右から解析する
+        return parseBinaryExpressionRest(precedence-1, leftOperand, pos);
+    }
+
+    function parseFunctionPipeExpression(precedence: OperatorPrecedence): Expression {
+        const pos = getNodePos();
+        const leftOperand = parseUnaryExpressionOrHigher();
+        // precedence-1: FunctionPipeExpressionを右から解析する
+        return parseBinaryExpressionRest(precedence-1, leftOperand, pos);
+    }
+
+    function parseFunctionPipeRightExpression(precedence: OperatorPrecedence): Expression {
+        const pos = getNodePos();
+        const leftOperand = parseUnaryExpressionOrHigher();
+        return parseBinaryExpressionRest(precedence, leftOperand, pos);
+    }
+
     function parseBinaryExpressionOrHigher(precedence: OperatorPrecedence): Expression {
         const pos = getNodePos();
         const leftOperand = parseUnaryExpressionOrHigher();
@@ -5583,6 +5624,15 @@ namespace Parser {
                         makeAsExpression(leftOperand, parseType());
                 }
             }
+            else if (token() === SyntaxKind.PipeToken && (leftOperand.kind === SyntaxKind.FunctionPipeExpression || leftOperand.kind === SyntaxKind.CallExpression || leftOperand.kind === SyntaxKind.Identifier)) {
+                leftOperand = makeFunctionPipeExpression(leftOperand, parseTokenNode(), parseFunctionPipeExpression(newPrecedence), pos);
+            }
+            else if (token() === SyntaxKind.PipeRightToken) {
+                leftOperand = makeFunctionPipeRightExpression(leftOperand, parseTokenNode(), parseFunctionPipeRightExpression(newPrecedence), pos);
+            }
+            else if (token() === SyntaxKind.CompositionLeftToken) {
+                leftOperand = makeFunctionCompositionLeftExpression(leftOperand, parseTokenNode(), parseFunctionCompositionLeftExpression(newPrecedence), pos);
+            }
             else {
                 leftOperand = makeBinaryExpression(leftOperand, parseTokenNode(), parseBinaryExpressionOrHigher(newPrecedence), pos);
             }
@@ -5605,6 +5655,18 @@ namespace Parser {
 
     function makeBinaryExpression(left: Expression, operatorToken: BinaryOperatorToken, right: Expression, pos: number): BinaryExpression {
         return finishNode(factory.createBinaryExpression(left, operatorToken, right), pos);
+    }
+
+    function makeFunctionPipeExpression(left: CallExpression | Identifier, operator: FunctionPipeOperator, right: FunctionPipeExpression | Expression, pos: number): FunctionPipeExpression {
+        return finishNode(factory.createFunctionPipeExpression(left, operator, right), pos);
+    }
+
+    function makeFunctionPipeRightExpression(left: FunctionPipeRightExpression | Expression, operator: FunctionPipeRightOperator, right: CallExpression | Identifier, pos: number): FunctionPipeRightExpression {
+        return finishNode(factory.createFunctionPipeRightExpression(left, operator, right), pos);
+    }
+
+    function makeFunctionCompositionLeftExpression(left: CallExpression | Identifier, operator: FunctionCompositionLeftOperator, right: FunctionCompositionLeftExpression | Expression, pos: number): FunctionCompositionLeftExpression {
+        return finishNode(factory.createFunctionCompositionLeftExpression(left, operator, right), pos);
     }
 
     function makeAsExpression(left: Expression, right: TypeNode): AsExpression {
@@ -5742,7 +5804,7 @@ namespace Parser {
                 if (isAwaitExpression()) {
                     return parseAwaitExpression();
                 }
-                // falls through
+            // falls through
             default:
                 return parseUpdateExpression();
         }
@@ -5776,8 +5838,8 @@ namespace Parser {
                 if (languageVariant !== LanguageVariant.JSX) {
                     return false;
                 }
-                // We are in JSX context and the token is part of JSXElement.
-                // falls through
+            // We are in JSX context and the token is part of JSXElement.
+            // falls through
             default:
                 return true;
         }
@@ -5979,8 +6041,8 @@ namespace Parser {
                     lastChild.openingElement,
                     lastChild.children,
                     finishNode(factory.createJsxClosingElement(finishNode(factoryCreateIdentifier(""), end, end)), end, end)),
-                lastChild.openingElement.pos,
-                end);
+                    lastChild.openingElement.pos,
+                    end);
 
                 children = createNodeArray([...children.slice(0, children.length - 1), newLast], children.pos, end);
                 closingElement = lastChild.closingElement;
@@ -6584,7 +6646,7 @@ namespace Parser {
     function parseArgumentOrArrayLiteralElement(): Expression {
         return token() === SyntaxKind.DotDotDotToken ? parseSpreadElement() :
             token() === SyntaxKind.CommaToken ? finishNode(factory.createOmittedExpression(), getNodePos()) :
-            parseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true);
+                parseAssignmentExpressionOrHigher(/*allowReturnTypeInArrowFunction*/ true);
     }
 
     function parseArgumentExpression(): Expression {
@@ -6685,8 +6747,8 @@ namespace Parser {
         const isAsync = some(modifiers, isAsyncModifier) ? SignatureFlags.Await : SignatureFlags.None;
         const name = isGenerator && isAsync ? doInYieldAndAwaitContext(parseOptionalBindingIdentifier) :
             isGenerator ? doInYieldContext(parseOptionalBindingIdentifier) :
-            isAsync ? doInAwaitContext(parseOptionalBindingIdentifier) :
-            parseOptionalBindingIdentifier();
+                isAsync ? doInAwaitContext(parseOptionalBindingIdentifier) :
+                    parseOptionalBindingIdentifier();
 
         const typeParameters = parseTypeParameters();
         const parameters = parseParameters(isGenerator | isAsync);
@@ -8825,7 +8887,7 @@ namespace Parser {
                                 linkEnd = scanner.getTokenEnd();
                                 break;
                             }
-                            // fallthrough if it's not a {@link sequence
+                        // fallthrough if it's not a {@link sequence
                         default:
                             // Anything else is doc comment text. We just save it. Because it
                             // wasn't a tag, we can no longer parse a tag on this line until we hit the next
@@ -9101,8 +9163,8 @@ namespace Parser {
                                 indent += 1;
                                 break;
                             }
-                            // record the * as a comment
-                            // falls through
+                        // record the * as a comment
+                        // falls through
                         default:
                             if (state !== JSDocState.SavingBackticks) {
                                 state = JSDocState.SavingComments; // leading identifiers start recording as well
@@ -9157,7 +9219,7 @@ namespace Parser {
                 }
                 const create = linkType === "link" ? factory.createJSDocLink
                     : linkType === "linkcode" ? factory.createJSDocLinkCode
-                    : factory.createJSDocLinkPlain;
+                        : factory.createJSDocLinkPlain;
                 return finishNode(create(name, text.join("")), start, scanner.getTokenEnd());
             }
 
@@ -10496,7 +10558,7 @@ function extractPragmas(pragmas: PragmaPseudoMapEntry[], range: CommentRange, te
             return;
         }
         if (pragma.args) {
-            const argument: {[index: string]: string | {value: string, pos: number, end: number}} = {};
+            const argument: { [index: string]: string | { value: string, pos: number, end: number } } = {};
             for (const arg of pragma.args) {
                 const matcher = getNamedArgRegEx(arg.name);
                 const matchResult = matcher.exec(text);
@@ -10554,11 +10616,11 @@ function addPragmaForMatch(pragmas: PragmaPseudoMapEntry[], range: CommentRange,
     return;
 }
 
-function getNamedPragmaArguments(pragma: PragmaDefinition, text: string | undefined): {[index: string]: string} | "fail" {
+function getNamedPragmaArguments(pragma: PragmaDefinition, text: string | undefined): { [index: string]: string } | "fail" {
     if (!text) return {};
     if (!pragma.args) return {};
     const args = trimString(text).split(/\s+/);
-    const argMap: {[index: string]: string} = {};
+    const argMap: { [index: string]: string } = {};
     for (let i = 0; i < pragma.args.length; i++) {
         const argument = pragma.args[i];
         if (!args[i] && !argument.optional) {

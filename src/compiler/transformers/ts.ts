@@ -20,6 +20,7 @@ import {
     ClassLikeDeclaration,
     classOrConstructorParameterIsDecorated,
     concatenate,
+    ConciseBody,
     ConstructorDeclaration,
     createExpressionFromEntityName,
     createRange,
@@ -44,9 +45,12 @@ import {
     findSuperStatementIndexPath,
     flattenDestructuringAssignment,
     FlattenLevel,
+    FunctionCompositionLeftExpression,
     FunctionDeclaration,
     FunctionExpression,
     FunctionLikeDeclaration,
+    FunctionPipeExpression,
+    FunctionPipeRightExpression as FunctionPipeRightExpression,
     GetAccessorDeclaration,
     getEffectiveBaseTypeNode,
     getEmitFlags,
@@ -128,7 +132,9 @@ import {
     MethodDeclaration,
     ModifierFlags,
     ModifierLike,
+    ModifierSyntaxKind,
     modifierToFlag,
+    ModifierToken,
     ModuleBlock,
     ModuleDeclaration,
     ModuleKind,
@@ -188,6 +194,7 @@ import {
     TextRange,
     TransformationContext,
     TransformFlags,
+    TypeParameterDeclaration,
     VariableDeclaration,
     VariableStatement,
     visitEachChild,
@@ -469,7 +476,7 @@ export function transformTypeScript(context: TransformationContext) {
             node.kind === SyntaxKind.ImportDeclaration ||
             node.kind === SyntaxKind.ImportClause ||
             (node.kind === SyntaxKind.ImportEqualsDeclaration &&
-             (node as ImportEqualsDeclaration).moduleReference.kind === SyntaxKind.ExternalModuleReference)) {
+                (node as ImportEqualsDeclaration).moduleReference.kind === SyntaxKind.ExternalModuleReference)) {
             // do not emit ES6 imports and exports since they are illegal inside a namespace
             return undefined;
         }
@@ -639,12 +646,20 @@ export function transformTypeScript(context: TransformationContext) {
             case SyntaxKind.IndexedAccessType:
             case SyntaxKind.MappedType:
             case SyntaxKind.LiteralType:
-                // TypeScript type nodes are elided.
-                // falls through
-
+            // TypeScript type nodes are elided.
+            // falls through
             case SyntaxKind.IndexSignature:
                 // TypeScript index signatures are elided.
                 return undefined;
+
+            case SyntaxKind.FunctionCompositionLeftExpression:
+                return visitFunctionCompositionLeftExpression(node as FunctionCompositionLeftExpression)
+
+            case SyntaxKind.FunctionPipeExpression:
+                return visitFunctionPipeExpression(node as FunctionPipeExpression);
+
+            case SyntaxKind.FunctionPipeRightExpression:
+                return visitFunctionPipeRightExpression(node as FunctionPipeRightExpression);
 
             case SyntaxKind.TypeAliasDeclaration:
                 // TypeScript type-only declarations are elided.
@@ -969,6 +984,69 @@ export function transformTypeScript(context: TransformationContext) {
         }
 
         return statement;
+    }
+
+    function visitFunctionCompositionLeftExpression(node: FunctionCompositionLeftExpression): ArrowFunction {
+        const isFunctionExpression = (declaration: Declaration): declaration is FunctionExpression => declaration.kind === SyntaxKind.FunctionExpression;
+        const isArrowFunction = (declaration: Declaration): declaration is ArrowFunction => declaration.kind === SyntaxKind.ArrowFunction;
+
+        const right = node.right.kind === SyntaxKind.FunctionCompositionLeftExpression
+            ? visitFunctionCompositionLeftExpression(node.right)
+            : node.right.kind === SyntaxKind.CallExpression
+                ? getResolvedSymbol(node)
+                : node.right;
+
+        let modifiers: ModifierToken<ModifierSyntaxKind>[] = [];
+        let typeParameters: TypeParameterDeclaration[] = [];
+        let parameters: ParameterDeclaration[] = [];
+
+        // 左辺の本体と組み合わせ、アロー関数の型を作り上げる
+        // function expression => 関数の定義＝関数宣言＋本体
+        let body: ConciseBody = factory.createBlock([]);
+
+        // 右辺から引数などを取り出す
+        const rightFnExpression = right.symbol?.valueDeclaration;
+        if (rightFnExpression && (isFunctionExpression(rightFnExpression) || isArrowFunction(rightFnExpression))) {
+            modifiers = rightFnExpression.modifiers?.slice() || modifiers;
+            typeParameters = rightFnExpression.typeParameters?.slice() || typeParameters;
+            parameters = rightFnExpression.parameters.slice();
+            body = rightFnExpression.body;
+        }
+
+        // const leftFnExpression = node.left.symbol?.valueDeclaration;
+        // if (leftFnExpression && (isFunctionExpression(leftFnExpression) || isArrowFunction(leftFnExpression))) {
+        //     body = leftFnExpression.body;
+        // }
+
+        // TODO 型をゲット
+        // equalsGreaterThanTokenを生成
+        return factory.createArrowFunction(modifiers, typeParameters, parameters, /* TODO */ undefined, undefined, body);
+    }
+
+    function visitFunctionPipeExpression(node: FunctionPipeExpression): CallExpression {
+        const right = node.right.kind === SyntaxKind.FunctionPipeExpression ? visitFunctionPipeExpression(node.right) : node.right;
+        if (node.left.kind === SyntaxKind.CallExpression) {
+            // 既存の呼び出しの引数にnode.rightを入れるだけ
+            const newArgs: NodeArray<Expression> = { ...node.left.arguments, [node.left.arguments.length]: right, length: node.left.arguments.length + 1 };
+            return factory.updateCallExpression(node.left, node.left.expression, node.left.typeArguments, newArgs);
+        }
+        else {
+            // node.leftは識別子だから、関数呼び出し式に似せないと
+            return factory.createCallExpression(node.left, [], [right]);
+        }
+    }
+
+    function visitFunctionPipeRightExpression(node: FunctionPipeRightExpression): CallExpression {
+        const left = node.left.kind === SyntaxKind.FunctionPipeRightExpression ? visitFunctionPipeRightExpression(node.left) : node.left;
+        if (node.right.kind === SyntaxKind.CallExpression) {
+            // 既存の呼び出しの引数にnode.leftを入れるだけ
+            const newArgs: NodeArray<Expression> = { ...node.right.arguments, [node.right.arguments.length]: left, length: node.right.arguments.length + 1 };
+            return factory.updateCallExpression(node.right, node.right.expression, node.right.typeArguments, newArgs);
+        }
+        else {
+            // node.leftは識別子だから、関数呼び出し式に似せないと
+            return factory.createCallExpression(node.right, [], [left]);
+        }
     }
 
     function visitClassExpression(node: ClassExpression): Expression {
@@ -1890,7 +1968,7 @@ export function transformTypeScript(context: TransformationContext) {
         if (value !== undefined) {
             return typeof value === "string" ? factory.createStringLiteral(value) :
                 value < 0 ? factory.createPrefixUnaryExpression(SyntaxKind.MinusToken, factory.createNumericLiteral(Math.abs(value))) :
-                factory.createNumericLiteral(value);
+                    factory.createNumericLiteral(value);
         }
         else {
             enableSubstitutionForNonQualifiedEnumMembers();
@@ -2674,7 +2752,7 @@ export function transformTypeScript(context: TransformationContext) {
             setConstantValue(node, constantValue);
             const substitute = typeof constantValue === "string" ? factory.createStringLiteral(constantValue) :
                 constantValue < 0 ? factory.createPrefixUnaryExpression(SyntaxKind.MinusToken, factory.createNumericLiteral(Math.abs(constantValue))) :
-                factory.createNumericLiteral(constantValue);
+                    factory.createNumericLiteral(constantValue);
 
             if (!compilerOptions.removeComments) {
                 const originalNode = getOriginalNode(node, isAccessExpression);

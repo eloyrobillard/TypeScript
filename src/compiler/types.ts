@@ -95,6 +95,7 @@ export const enum SyntaxKind {
     PercentToken,
     PlusPlusToken,
     MinusMinusToken,
+    CompositionLeftToken,
     LessThanLessThanToken,
     GreaterThanGreaterThanToken,
     GreaterThanGreaterThanGreaterThanToken,
@@ -108,6 +109,8 @@ export const enum SyntaxKind {
     QuestionToken,
     ColonToken,
     AtToken,
+    PipeToken,
+    PipeRightToken,
     QuestionQuestionToken,
     /** Only the JSDoc scanner produces BacktickToken. The normal scanner produces NoSubstitutionTemplateLiteral and related kinds. */
     BacktickToken,
@@ -131,7 +134,7 @@ export const enum SyntaxKind {
     QuestionQuestionEqualsToken,
     CaretEqualsToken,
     // Identifiers and PrivateIdentifiers
-    Identifier,
+    Identifier, // 80
     PrivateIdentifier,
     /**
      * Only the special JSDoc comment text scanner produces JSDocCommentTextTokes. One of these tokens spans all text after a tag comment's start and before the next @
@@ -171,7 +174,7 @@ export const enum SyntaxKind {
     TrueKeyword,
     TryKeyword,
     TypeOfKeyword,
-    VarKeyword,
+    VarKeyword, // 115
     VoidKeyword,
     WhileKeyword,
     WithKeyword,
@@ -294,6 +297,9 @@ export const enum SyntaxKind {
     PrefixUnaryExpression,
     PostfixUnaryExpression,
     BinaryExpression,
+    FunctionCompositionLeftExpression,
+    FunctionPipeExpression,
+    FunctionPipeRightExpression,
     ConditionalExpression,
     TemplateExpression,
     YieldExpression,
@@ -1096,6 +1102,9 @@ export type HasChildren =
     | PrefixUnaryExpression
     | PostfixUnaryExpression
     | BinaryExpression
+    | FunctionCompositionLeftExpression
+    | FunctionPipeExpression
+    | FunctionPipeRightExpression
     | ConditionalExpression
     | TemplateExpression
     | YieldExpression
@@ -2623,6 +2632,9 @@ export type AssignmentOperator =
 // see: https://tc39.github.io/ecma262/#prod-AssignmentExpression
 export type AssignmentOperatorOrHigher =
     | SyntaxKind.QuestionQuestionToken
+    | SyntaxKind.CompositionLeftToken
+    | SyntaxKind.PipeToken
+    | SyntaxKind.PipeRightToken
     | LogicalOperatorOrHigher
     | AssignmentOperator
     ;
@@ -2632,6 +2644,10 @@ export type BinaryOperator =
     | AssignmentOperatorOrHigher
     | SyntaxKind.CommaToken
     ;
+
+export type FunctionPipeOperator = SyntaxKind.PipeToken
+export type FunctionPipeRightOperator = SyntaxKind.PipeRightToken
+export type FunctionCompositionLeftOperator = SyntaxKind.CompositionLeftToken
 
 export type LogicalOrCoalescingAssignmentOperator
     = SyntaxKind.AmpersandAmpersandEqualsToken
@@ -2646,6 +2662,27 @@ export interface BinaryExpression extends Expression, Declaration, JSDocContaine
     readonly left: Expression;
     readonly operatorToken: BinaryOperatorToken;
     readonly right: Expression;
+}
+
+export interface FunctionCompositionLeftExpression extends Expression, Declaration, JSDocContainer {
+    readonly kind: SyntaxKind.FunctionCompositionLeftExpression;
+    readonly left: CallExpression | Identifier;
+    readonly operatorToken: FunctionCompositionLeftOperator;
+    readonly right: FunctionCompositionLeftExpression | CallExpression | Identifier;
+}
+
+export interface FunctionPipeExpression extends Expression, Declaration, JSDocContainer {
+    readonly kind: SyntaxKind.FunctionPipeExpression;
+    readonly left: FunctionPipeExpression | CallExpression | Identifier;
+    readonly operatorToken: FunctionPipeOperator;
+    readonly right: FunctionPipeExpression | Expression;
+}
+
+export interface FunctionPipeRightExpression extends Expression, Declaration, JSDocContainer {
+    readonly kind: SyntaxKind.FunctionPipeRightExpression;
+    readonly left: FunctionPipeRightExpression | Expression;
+    readonly operatorToken: FunctionPipeRightOperator;
+    readonly right: FunctionPipeRightExpression | CallExpression | Identifier;
 }
 
 export type AssignmentOperatorToken = Token<AssignmentOperator>;
@@ -2736,6 +2773,12 @@ export interface ConditionalExpression extends Expression {
     readonly questionToken: QuestionToken;
     readonly whenTrue: Expression;
     readonly colonToken: ColonToken;
+    readonly whenFalse: Expression;
+}
+
+export interface PipeExpression extends Expression {
+    readonly kind: SyntaxKind.ConditionalExpression;
+    readonly leftOperand: Expression;
     readonly whenFalse: Expression;
 }
 
@@ -7888,6 +7931,7 @@ export const enum TransformFlags {
     ContainsLexicalSuper = 1 << 27,
     ContainsUpdateExpressionForIdentifier = 1 << 28,
     ContainsPrivateIdentifierInExpression = 1 << 29,
+    ContainsFunctionPipeExpression = 1 << 30,
 
     HasComputedFlags = 1 << 31, // Transform flags have been computed.
 
@@ -8518,6 +8562,9 @@ export interface NodeFactory {
     updatePostfixUnaryExpression(node: PostfixUnaryExpression, operand: Expression): PostfixUnaryExpression;
     createBinaryExpression(left: Expression, operator: BinaryOperator | BinaryOperatorToken, right: Expression): BinaryExpression;
     updateBinaryExpression(node: BinaryExpression, left: Expression, operator: BinaryOperator | BinaryOperatorToken, right: Expression): BinaryExpression;
+    createFunctionCompositionLeftExpression(left: CallExpression | Identifier, operator: FunctionCompositionLeftOperator, right: FunctionCompositionLeftExpression | CallExpression | Identifier): FunctionCompositionLeftExpression;
+    createFunctionPipeExpression(left: CallExpression | Identifier, operator: FunctionPipeOperator, right: FunctionPipeExpression | Expression): FunctionPipeExpression;
+    createFunctionPipeRightExpression(left: FunctionPipeRightExpression | Expression, operator: FunctionPipeRightOperator, right: CallExpression | Identifier): FunctionPipeRightExpression;
     createConditionalExpression(condition: Expression, questionToken: QuestionToken | undefined, whenTrue: Expression, colonToken: ColonToken | undefined, whenFalse: Expression): ConditionalExpression;
     updateConditionalExpression(node: ConditionalExpression, condition: Expression, questionToken: QuestionToken, whenTrue: Expression, colonToken: ColonToken, whenFalse: Expression): ConditionalExpression;
     createTemplateExpression(head: TemplateHead, templateSpans: readonly TemplateSpan[]): TemplateExpression;
@@ -8610,6 +8657,7 @@ export interface NodeFactory {
     updateFunctionDeclaration(node: FunctionDeclaration, modifiers: readonly ModifierLike[] | undefined, asteriskToken: AsteriskToken | undefined, name: Identifier | undefined, typeParameters: readonly TypeParameterDeclaration[] | undefined, parameters: readonly ParameterDeclaration[], type: TypeNode | undefined, body: Block | undefined): FunctionDeclaration;
     createClassDeclaration(modifiers: readonly ModifierLike[] | undefined, name: string | Identifier | undefined, typeParameters: readonly TypeParameterDeclaration[] | undefined, heritageClauses: readonly HeritageClause[] | undefined, members: readonly ClassElement[]): ClassDeclaration;
     updateClassDeclaration(node: ClassDeclaration, modifiers: readonly ModifierLike[] | undefined, name: Identifier | undefined, typeParameters: readonly TypeParameterDeclaration[] | undefined, heritageClauses: readonly HeritageClause[] | undefined, members: readonly ClassElement[]): ClassDeclaration;
+    updatePipeExpression(node: Node): Node;
     createInterfaceDeclaration(modifiers: readonly ModifierLike[] | undefined, name: string | Identifier, typeParameters: readonly TypeParameterDeclaration[] | undefined, heritageClauses: readonly HeritageClause[] | undefined, members: readonly TypeElement[]): InterfaceDeclaration;
     updateInterfaceDeclaration(node: InterfaceDeclaration, modifiers: readonly ModifierLike[] | undefined, name: Identifier, typeParameters: readonly TypeParameterDeclaration[] | undefined, heritageClauses: readonly HeritageClause[] | undefined, members: readonly TypeElement[]): InterfaceDeclaration;
     createTypeAliasDeclaration(modifiers: readonly ModifierLike[] | undefined, name: string | Identifier, typeParameters: readonly TypeParameterDeclaration[] | undefined, type: TypeNode): TypeAliasDeclaration;

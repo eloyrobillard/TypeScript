@@ -37169,6 +37169,36 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                 }
                 return resultType;
             }
+            case SyntaxKind.CompositionLeftToken: {
+                // leftType.callSignatures[0]から関数の返り値の型
+                const leftSignature = (leftType as ResolvedType).callSignatures[0];
+
+                // rightType.callSignatures[0]から引数の型
+                const rightSignature = (rightType as ResolvedType).callSignatures[0];
+
+                if (!leftSignature || ! rightSignature) {
+                    return errorType;
+                }
+
+                // 関数型を偽装して
+                return createFunctionType(rightSignature.typeParameters, undefined, rightSignature.parameters, getReturnTypeOfSignature(leftSignature));
+            }
+            case SyntaxKind.PipeToken: {
+                const signature = leftType.callSignatures[0];
+                if (!signature) {
+                    return errorType;
+                }
+                const resultType = getReturnTypeOfSignature(signature);
+                return resultType;
+            }
+            case SyntaxKind.PipeRightToken: {
+                const signature = rightType.callSignatures[0];
+                if (!signature) {
+                    return errorType;
+                }
+                const resultType = getReturnTypeOfSignature(signature);
+                return resultType;
+            }
             case SyntaxKind.EqualsToken:
                 const declKind = isBinaryExpression(left.parent) ? getAssignmentDeclarationKind(left.parent) : AssignmentDeclarationKind.None;
                 checkAssignmentDeclaration(declKind, rightType);

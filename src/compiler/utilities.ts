@@ -5681,6 +5681,9 @@ export function getBinaryOperatorPrecedence(kind: SyntaxKind): OperatorPrecedenc
         case SyntaxKind.GreaterThanToken:
         case SyntaxKind.LessThanEqualsToken:
         case SyntaxKind.GreaterThanEqualsToken:
+        case SyntaxKind.CompositionLeftToken:
+        case SyntaxKind.PipeToken:
+        case SyntaxKind.PipeRightToken:
         case SyntaxKind.InstanceOfKeyword:
         case SyntaxKind.InKeyword:
         case SyntaxKind.AsKeyword:

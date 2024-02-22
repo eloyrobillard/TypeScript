@@ -1933,6 +1933,9 @@ export function createScanner(languageVersion: ScriptTarget,
                     if (text.charCodeAt(pos + 1) === CharacterCodes.equals) {
                         return pos += 2, token = SyntaxKind.MinusEqualsToken;
                     }
+                    if (text.charCodeAt(pos + 1) === CharacterCodes.lessThan) {
+                        return pos += 2, token = SyntaxKind.CompositionLeftToken;
+                    }
                     pos++;
                     return token = SyntaxKind.MinusToken;
                 case CharacterCodes.dot:
@@ -2092,6 +2095,9 @@ export function createScanner(languageVersion: ScriptTarget,
                     if (text.charCodeAt(pos + 1) === CharacterCodes.equals) {
                         return pos += 2, token = SyntaxKind.LessThanEqualsToken;
                     }
+                    if (text.charCodeAt(pos + 1) === CharacterCodes.bar) {
+                        return pos += 2, token = SyntaxKind.PipeToken;
+                    }
                     if (languageVariant === LanguageVariant.JSX &&
                         text.charCodeAt(pos + 1) === CharacterCodes.slash &&
                         text.charCodeAt(pos + 2) !== CharacterCodes.asterisk) {
@@ -2180,6 +2186,9 @@ export function createScanner(languageVersion: ScriptTarget,
                     }
                     if (text.charCodeAt(pos + 1) === CharacterCodes.equals) {
                         return pos += 2, token = SyntaxKind.BarEqualsToken;
+                    }
+                    if (text.charCodeAt(pos + 1) === CharacterCodes.greaterThan) {
+                        return pos += 2, token = SyntaxKind.PipeRightToken;
                     }
                     pos++;
                     return token = SyntaxKind.BarToken;

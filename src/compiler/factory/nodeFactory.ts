@@ -106,6 +106,9 @@ import {
     ForStatement,
     FunctionDeclaration,
     FunctionExpression,
+    FunctionPipeExpression,
+    FunctionPipeRightExpression as FunctionPipeRightExpression,
+    FunctionPipeOperator,
     FunctionTypeNode,
     GeneratedIdentifier,
     GeneratedIdentifierFlags,
@@ -474,6 +477,9 @@ import {
     WhileStatement,
     WithStatement,
     YieldExpression,
+    FunctionPipeRightOperator,
+    FunctionCompositionLeftExpression,
+    FunctionCompositionLeftOperator,
 } from "../_namespaces/ts";
 
 let nextAutoGenerateId = 0;
@@ -686,6 +692,9 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         updatePostfixUnaryExpression,
         createBinaryExpression,
         updateBinaryExpression,
+        createFunctionCompositionLeftExpression,
+        createFunctionPipeExpression,
+        createFunctionPipeRightExpression,
         createConditionalExpression,
         updateConditionalExpression,
         createTemplateExpression,
@@ -3332,6 +3341,48 @@ export function createNodeFactory(flags: NodeFactoryFlags, baseFactory: BaseNode
         }
 
         node.jsDoc = undefined; // initialized by parser (JsDocContainer)
+        return node;
+    }
+
+    function createFunctionCompositionLeftExpression(left: CallExpression | Identifier, operator: FunctionCompositionLeftOperator, right: FunctionCompositionLeftExpression | CallExpression | Identifier): FunctionCompositionLeftExpression {
+        const node = createBaseDeclaration<FunctionCompositionLeftExpression>(SyntaxKind.FunctionCompositionLeftExpression);
+
+        node.left = left;
+        node.operatorToken = operator;
+        node.right = right;
+        node.transformFlags |= TransformFlags.ContainsTypeScript;
+        node.transformFlags |=
+            propagateChildFlags(node.left) |
+            propagateChildFlags(node.right);
+
+        return node;
+    }
+
+    function createFunctionPipeExpression(left: CallExpression | Identifier, pipeOperator: FunctionPipeOperator, right: FunctionPipeExpression | Expression): FunctionPipeExpression {
+        const node = createBaseDeclaration<FunctionPipeExpression>(SyntaxKind.FunctionPipeExpression);
+
+        node.left = left;
+        node.operatorToken = pipeOperator;
+        node.right = right;
+        node.transformFlags |= TransformFlags.ContainsTypeScript;
+        node.transformFlags |=
+            propagateChildFlags(node.left) |
+            propagateChildFlags(node.right);
+
+        return node;
+    }
+
+    function createFunctionPipeRightExpression(left: FunctionPipeRightExpression | Expression, pipeOperator: FunctionPipeRightOperator, right: CallExpression | Identifier): FunctionPipeRightExpression {
+        const node = createBaseDeclaration<FunctionPipeRightExpression>(SyntaxKind.FunctionPipeRightExpression);
+
+        node.left = left;
+        node.operatorToken = pipeOperator;
+        node.right = right;
+        node.transformFlags |= TransformFlags.ContainsTypeScript;
+        node.transformFlags |=
+            propagateChildFlags(node.left) |
+            propagateChildFlags(node.right);
+
         return node;
     }
 

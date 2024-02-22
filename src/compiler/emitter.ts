@@ -128,6 +128,7 @@ import {
     FunctionDeclaration,
     FunctionExpression,
     FunctionLikeDeclaration,
+    FunctionPipeExpression,
     FunctionTypeNode,
     GeneratedIdentifier,
     GeneratedIdentifierFlags,
@@ -2236,6 +2237,9 @@ export function createPrinter(printerOptions: PrinterOptions = {}, handlers: Pri
                 case SyntaxKind.TypeAssertionExpression:
                     return emitTypeAssertionExpression(node as TypeAssertion);
                 case SyntaxKind.ParenthesizedExpression:
+                case SyntaxKind.FunctionCompositionLeftExpression:
+                case SyntaxKind.FunctionPipeExpression:
+                case SyntaxKind.FunctionPipeRightExpression:
                     return emitParenthesizedExpression(node as ParenthesizedExpression);
                 case SyntaxKind.FunctionExpression:
                     return emitFunctionExpression(node as FunctionExpression);
@@ -3133,6 +3137,11 @@ export function createPrinter(printerOptions: PrinterOptions = {}, handlers: Pri
         writeLineSeparatorsAfter(node.expression, node);
         decreaseIndentIf(indented);
         emitTokenWithComment(SyntaxKind.CloseParenToken, node.expression ? node.expression.end : openParenPos, writePunctuation, node);
+    }
+
+    function emitFunctionPipeExpression(node: FunctionPipeExpression) {
+        emitExpression(node.left, /*parenthesizerRule*/ undefined);
+        writeLineSeparatorsAfter(node.left, node);
     }
 
     function emitFunctionExpression(node: FunctionExpression) {
